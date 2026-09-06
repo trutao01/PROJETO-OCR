@@ -1,0 +1,7 @@
+easyocr
+mss
+deep-translator
+Pillow
+customtkinter
+keyboard
+pyinstaller
