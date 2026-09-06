@@ -34,22 +34,58 @@ class OCREngine:
         if self.reader is None:
             return "Selecione um idioma primeiro."
 
+        from PIL import ImageEnhance
+        # Pre-processamento: aumenta o contraste para ajudar a IA a enxergar melhor as letras
+        enhancer = ImageEnhance.Contrast(image_pil)
+        image_pil = enhancer.enhance(2.0)
+
         # Converte a imagem para o formato que o EasyOCR entende
         image_np = np.array(image_pil)
         
-        # Extrai os textos da imagem
-        results = self.reader.readtext(image_np)
+        # Extrai os textos usando ampliação (mag_ratio) para fontes difíceis
+        results = self.reader.readtext(image_np, detail=0, mag_ratio=2.0)
         
-        if not results:
-            return "Nenhum texto encontrado na área."
-
         # Junta todas as frases encontradas
-        extracted_text = " ".join([res[1] for res in results])
+        extracted_text = " ".join(results).strip()
+        
+        if not extracted_text:
+            return "A IA não conseguiu ler as letras nessa imagem."
+
+        print(f"Texto lido pelo OCR: {extracted_text}")
+        
+        # Mapeia o idioma selecionado para o código do tradutor
+        lang_to_code = {
+            "Inglês": "en", "Japonês": "ja", "Coreano": "ko",
+            "Chinês (Simplificado)": "zh-CN", "Chinês (Tradicional)": "zh-TW", "Russo": "ru"
+        }
+        src_lang = lang_to_code.get(self.current_lang, "en")
+        
+        # Remove hifens e pontuações estranhas no final que causam bug no Google Translator
+        clean_text = extracted_text.strip(" -_.,;?!")
         
         try:
-            # Traduz automaticamente para português
-            translator = GoogleTranslator(source='auto', target='pt')
-            translated = translator.translate(extracted_text)
-            return translated
+            # Usar o idioma específico em vez de 'auto' resolve 99% dos erros 500 do Google
+            translator = GoogleTranslator(source=src_lang, target='pt')
+            translated = translator.translate(clean_text)
+            
+            # Se mesmo assim o Google falhar, usamos um tradutor de segurança (MyMemory)
+            if "Error 500" in translated or "That's an error" in translated:
+                from deep_translator import MyMemoryTranslator
+                print("Google falhou, acionando tradutor reserva (MyMemory)...")
+                # MyMemory exige en-US ou en-GB em vez de apenas 'en'
+                src_my = "en-US" if src_lang == "en" else src_lang
+                backup_translator = MyMemoryTranslator(source=src_my, target='pt-BR')
+                translated = backup_translator.translate(clean_text)
+
+            # Devolve a tradução e o texto original embaixo para o usuário conferir
+            return f"{translated}\n\n(Original lido: {extracted_text})"
         except Exception as e:
-            return "Erro na tradução. Verifique sua internet."
+            try:
+                # Fallback caso o Google jogue um erro de internet/conexão
+                from deep_translator import MyMemoryTranslator
+                src_my = "en-US" if src_lang == "en" else src_lang
+                backup_translator = MyMemoryTranslator(source=src_my, target='pt-BR')
+                translated = backup_translator.translate(clean_text)
+                return f"{translated}\n\n(Original lido: {extracted_text})"
+            except:
+                return f"⚠️ Erro nos servidores de tradução.\n\nTexto original lido: {extracted_text}"

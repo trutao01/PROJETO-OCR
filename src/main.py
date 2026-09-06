@@ -17,8 +17,13 @@ class RedirectText:
         self.text_widget = text_widget
 
     def write(self, string):
-        self.text_widget.insert(tk.END, string)
-        self.text_widget.see(tk.END) # Scroll para o final
+        def _write():
+            try:
+                self.text_widget.insert(tk.END, string)
+                self.text_widget.see(tk.END) # Scroll para o final
+            except:
+                pass
+        self.text_widget.after(0, _write)
         
     def flush(self):
         pass
@@ -37,8 +42,9 @@ class OCRTranslatorApp(ctk.CTk):
         self.setup_ui()
         
         # Redireciona o print para o painel de logs
-        sys.stdout = RedirectText(self.log_box)
-        sys.stderr = RedirectText(self.log_box)
+        # REMOVIDO para evitar que barras de progresso de download (tqdm) travem a interface
+        # sys.stdout = RedirectText(self.log_box)
+        # sys.stderr = RedirectText(self.log_box)
         
         print("Iniciando KRONOS Tradutor...")
         
